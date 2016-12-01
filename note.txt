@@ -1,0 +1,95 @@
+http://10.0.2.73/bsd/20161103_notes_QEMU.txt
+
+
+https://github.com/JeanSairien/bsd.git
+
+paper.steepath.eu :slide 
+
+miror.steepath.eu
+
+config de base de openbsd
+
+uname -a ---version de l'os 
+
+shutdown -hp now 
+
+dhclient em0 pour definir l'adresse 
+
+ping google.fr
+
+/etc/resolve.conf 
+
+name server 8.8.8.8
+ifconfig em0 
+
+cd /var/dhclient.base
+
+chmod +x openup
+
+./openup -c --> pour les patch : recherche 
+
+./openup check
+
+sudo pkg-add install ---> pour installer 
+
+pkg-info -q 
+
+export PKG_path 
+pkg _path = http://ftp.fr .openbsd.org/pub/openbsd/5.9/amd64
+
+
+
+reseau sous openbsd 
+
+ecoute tcp 
+pour le udp sudo tcpdump -evvvi lo udp port 5555
+pour le tcp sudo tcpdump -evvvi lo tcp port 5555
+
+nc -kul 5555
+
+nc -kl 5555
+
+echo test | nc -u 127.0.0.1 5555
+
+echo test | nc 127.0.0.1 5555
+
+cat /var/db/dhclient.leases.em0
+
+ifconfig em0 192.168.42.3 255.255.255.0 up
+
+ou
+ifconfig  em0 192.168.42.3/24 up
+
+
+
+echo inet 192.168.42.3 ou 3/24 255.255.255.0 > /etc/hostname.em0 
+
+echo up >> /etc/hostname.em0
+
+sh /etc/netstart em0
+
+echo inet6 fdf3:7c3f:205c:14a1::43/64 > /etc/hostname.em0 
+
+echo up >> /etc/hostname.em0
+
+sh /etc/netstart em0
+
+
+bridger la vm
+ sudo ip link add bridge type bridge
+
+
+voir les connection 
+ ip link show 
+
+link switch virtuel
+sudo ip link set enp7s0 master bridge
+
+
+dans virtualbox 
+
+configuration-> reseau-> mode connexion -> connexion par pont -> bridge 
+
+
+
+netstat -nrf inet 
