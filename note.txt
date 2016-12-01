@@ -1,7 +1,6 @@
 http://10.0.2.73/bsd/20161103_notes_QEMU.txt
 
-
-https://github.com/JeanSairien/bsd.git
+http://www.linuxfromscratch.org/blfs/view/svn/postlfs/qemu.html
 
 paper.steepath.eu :slide 
 
