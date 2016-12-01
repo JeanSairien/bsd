@@ -36,7 +36,7 @@ pkg-info -q
 export PKG_path 
 pkg _path = http://ftp.fr .openbsd.org/pub/openbsd/5.9/amd64
 
-
+-----------------------------------
 
 reseau sous openbsd 
 
@@ -73,6 +73,7 @@ echo up >> /etc/hostname.em0
 
 sh /etc/netstart em0
 
+---------------------------------
 
 bridger la vm
  sudo ip link add bridge type bridge
@@ -92,3 +93,20 @@ configuration-> reseau-> mode connexion -> connexion par pont -> bridge
 
 
 netstat -nrf inet 
+
+
+
+-----------------------------------------
+
+netbsd-xen
+
+
+xl list 
+
+xl info 
+
+xl dmesg
+
+xl info | grep VMX
+
+xl dmesg | grep -e HVM -e SVM
