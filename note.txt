@@ -110,3 +110,19 @@ xl dmesg
 xl info | grep VMX
 
 xl dmesg | grep -e HVM -e SVM
+
+
+
+-------------QEMU-------------
+
+ dd if=/dev/zero of=disk.raw bs=1M count=1000
+
+ou
+
+qemu-img create -f qcow2 disk2.raw 10G
+
+qemu-img convert -f vmdk -O qcow2 ~/VirtualBox\ VMs/FreeBSD-ZFS/FreeBSD-ZFS-disk1.vmdk disk.qcow 
+
+qemu-system-x86_64 /dev/sdb -m 1M
+
+sudo qemu-system-x86_64 /dev/sdb -m 1M -enable-kvm
