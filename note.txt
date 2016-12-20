@@ -2,9 +2,9 @@ http://10.0.2.73/bsd/20161103_notes_QEMU.txt
 
 http://www.linuxfromscratch.org/blfs/view/svn/postlfs/qemu.html
 
-paper.steepath.eu :slide 
+https://papers.steepath.eu/home
 
-miror.steepath.eu
+mirror.steepath.eu
 
 config de base de openbsd
 
