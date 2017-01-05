@@ -126,3 +126,10 @@ qemu-img convert -f vmdk -O qcow2 ~/VirtualBox\ VMs/FreeBSD-ZFS/FreeBSD-ZFS-disk
 qemu-system-x86_64 /dev/sdb -m 1M
 
 sudo qemu-system-x86_64 /dev/sdb -m 1M -enable-kvm
+
+
+-------------shell------------------
+
+
+echo $SHELL -> version de shell
+
