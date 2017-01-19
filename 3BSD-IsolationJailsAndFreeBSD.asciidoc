@@ -1,0 +1,865 @@
+= BSD#3 - Administration FreeBSD, jails for fun and profit
+:author:    Mathieu Kerjouan <contact@steepath.eu>
+:twitter:   https://twitter.com/niamtokik
+:backend:   slidy
+:max-width: 50em
+:icons:
+:iconsdir: /usr/local/etc/asciidoc/images/icons
+:images:
+:imagesdir: ./img/
+:copyright: Mathieu Kerjouan <contact@steepath.eu>
+
+//////////////////////////////////////////////////////////////////////
+Copyright (c) 2016, Mathieu Kerjouan <contact@steepath.eu>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//////////////////////////////////////////////////////////////////////
+
+== But de l'atelier
+
+ * Comprendre les buts de l'isolation
+ * Créer un chroot
+ * Créer une jail
+ * Utiliser les outils
+
+== FreeBSD - Unix et processus (1)
+
+Avant de parler d'isolation et de jails, il est nécessaire de définir
+ce qu'est un programme puis un processus, et comment fonctionne ces
+concepts sur Unix.
+
+image:jailed.gif[]
+
+== Unix - Qu'est-ce qu'un programme?
+
+Un programme est une suite d'instructions. Ces instructions sont
+définis par l'architecture du système et plus particulièrement du
+CPU. Le système d'exploitation (qui est lui-même un programme) et son
+environnement définissent des règles, des méthodes et des standards
+lors de l'exécution des instructions contenu dans le programme
+exécuté.
+
+Par exemple, pour qu'un programme puisse être exécuté sur une
+plateforme Unix moderne, il est nécessaire qu'il possède un format
+spécifique définissant les caractéristiques du programmes (la première
+instruction à lancé, la mémoire à initialiser, ou encore les
+bibliothèques externes appelées par l'application). Ce format ce nomme
+actuellement ELF (Executable and Linkable Format). Ces informations
+sont accessible via les commandes
+https://www.freebsd.org/cgi/man.cgi?query=readelf[`readelf`] ou
+https://www.freebsd.org/cgi/man.cgi?query=objdump[`objdump`].
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+readelf -a /bin/cat
+objdump -x /bin/ls
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Une autre commande utile est
+https://www.freebsd.org/cgi/man.cgi?query=nm[`nm`] et permet de lister
+les symboles (adresse et nom d'une fonction) contenu dans un
+programme.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# récupère la liste des symboles dynamiques
+nm -D /bin/cat
+
+# récupère la liste de tous les symboles
+nm -a /boot/kernel/kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Unix - Qu'est-ce qu'un processus?
+
+Un processus est un programme en cours d'exécution. Il possède un état
+définis par le kernel (en cours de création, en cours d'exécution, en
+sommeil, arrêté ou zombifié). Lors du lancement, il lui est aussi
+attribué un identifiant unique (PID). Vu qu'un processus est un
+programme exécuté, il possède des attributs lié à l'utilisateur et au
+groupe qui l'a exécuté par exemple.
+
+Un système Unix peut lancer plusieurs processus, chacun possédant sa
+propre zone mémoire et isolé de tous les autres processus. Les
+processus sont concurrents, ils peuvent s'exécuter en parallèle. C'est
+le kernel qui détient le pouvoir d'organiser quel processus sera
+exécuté avant l'autre, ordre basé sur un ordonnanceur (scheduler).
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# exécution de la commande sleep en tâche de fond
+sleep 100 &
+
+# la variable spéciale $! permet d'afficher le PID de la dernière
+# commande mis en tache de fond
+echo $!
+
+# on affiche les informations du processus fonctionnant en tâche de
+# fond
+ps -aux -p $!
+procstat $!
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Visualiser les processus (top)
+
+La commande https://www.freebsd.org/cgi/man.cgi?query=top[`top`]
+permet de visualiser l'état des processus fonctionnement sur le
+système. Par défaut, il se lance en mode interactif, offrant une
+vision sous forme d'un tableau récapitulant l'activité du système.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# montre tous les processus fonctionnant sur le système
+top
+
+# montre seulement les processus actif du système
+top -I
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Visualiser les processus (ps)
+
+la commande https://www.freebsd.org/cgi/man.cgi?query=ps[`ps`] permet
+de visualiser les processus présent sur la machine en cours
+d'exécution.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# montre seulement les processus lié à son utilisateur
+ps
+ps -aU ${USER}
+
+# affiche tous les processus
+ps -a
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Visualiser les processus (procfs)
+
+https://www.freebsd.org/cgi/man.cgi?query=procfs[`procfs`] est un
+pseudo-système de fichier permettant de voir la liste des processus
+ainsi que leurs informations sous forme de fichier.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mount -tprocfs procfs /proc
+cd /proc
+ls
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Visualiser un processus (pgrep)
+
+https://www.freebsd.org/cgi/man.cgi?query=pgrep[`pgrep`] permet de
+visualiser un ou processus basé sur des critères définis par
+l'utilisateur.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# retourne la liste de tous les PIDs du système
+pgrep ".*"
+
+# retourne la liste de tous les processus ayant pour nom "cron"
+pgrep cron
+
+# retourne la liste tous les PIDs fonctionnant sur la jail $jail_name
+pgrep -j $jail_name ".*"
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Diagnostiquer un processus (procstat)
+
+La commande
+https://www.freebsd.org/cgi/man.cgi?query=procstat[`procstat`] permet
+d'afficher les informations pour un processus donné ou pour tous (avec
+l'argument `-a`)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# affiche les informations concernant tous les processus
+procstat -a
+
+# affiche les informations concernant un processus
+procstat $processus
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Diagnostiquer un processus (kdump,ktrace)
+
+https://www.freebsd.org/cgi/man.cgi?query=ktrace[`ktrace`] permet de
+tracer les actions du kernel opéré sur un processus, il génère un
+fichier binaire `ktrace.out`, lisible avec
+https://www.freebsd.org/cgi/man.cgi?query=kdump[`kdump`]. Son
+fonctionnement est équivalent à la commande `strace` sous linux.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# dump d'un processus en cours de fonctionnement
+ktrace -p ${pid}
+
+# dump lors d'un lancement d'application
+ktrace top
+
+# visualisation du dump
+kdump
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Diagnostiquer un processus (dtruss)
+
+https://www.freebsd.org/cgi/man.cgi?query=dtruss[`dtruss`] est un
+outil permettant de tracer l'activité d'un processus (appels systèmes)
+en utilisant le framework `dtrace`.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# examine l'activité du pid ${pid}
+dtruss -p ${pid}
+
+# examine l'activité du processus nommé ${name}
+dtruss -n ${name}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Interaction avec un ou plusieurs processus (kill)
+
+Les processus peuvent recevoir des messages. Ces messages
+correspondent à des actions précisent ou configurables. L'utilitaire
+https://www.freebsd.org/cgi/man.cgi?query=kill[`kill`] permet donc
+d'envoyer un message à un processus en cours de fonctionnement.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# envois le signal Hang Up sur le processus $pid
+kill -HUP $pid
+
+# envois le signal Interrupt 
+kill -2 $pid
+
+# envois le signal Kill 
+kill -9 $pid
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Interaction avec un ou plusieurs processus (killall)
+
+https://www.freebsd.org/cgi/man.cgi?query=killall[`killall`] est
+similaire à la commande `kill` excepté qu'elle utilise le nom au lieu
+du PID.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# envois le signal Hangup au processus portant le nom "cron"
+killall -HUP cron
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Interaction avec un ou plusieurs processus (pkill)
+
+https://www.freebsd.org/cgi/man.cgi?query=pkill[`pkill`] permet
+d'envoyer un message à un groupe de processus définis par
+l'utilisateur.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# envois le signal Hangup au processus
+pkill -HUP cron
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Isolation "logique" (chroot)
+
+Un https://www.freebsd.org/cgi/man.cgi?query=chroot[`chroot`]
+(changement de racine) est une méthode d'isolation simple permettant
+de changer simplement l'emplacement de référence d'un processus.
+
+La racine (`/`) est le point le plus haut de votre système de
+fichier. Lors de l'exécution d'un programme, le système utilisera donc
+`/` comme référence si il a besoin d'agir sur le système de fichier.
+
+Le changement de racine permet de changer de racine, donc, de changer
+`/` en, par exemple `/home/chroot`. Le processus lancé verra alors
+`/home/chroot` comme sa nouvelle racine (`/`).
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Manipuler un chroot (chroot)
+
+A quoi sert un changement de racine? Tout d'abord un changement de
+racine n'a pas pour but d'augmenter la sécurité d'un processus lancé,
+mais de l'isoler logiquement du reste du système. Le processus avec
+une racine différente aura toujours accès aux informations concernant
+le système.
+
+En pratique, le changement de racine est utilisé pour différentes
+tâches:
+
+ * Lancement d'un processus avec un utilisateur et un groupe
+   différent
+ * Récupération d'un accès sur un serveur 
+ * Modification de password
+ * Isolation d'application non critique
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# lance un shell avec l'utilisateur nobody et le groupe nobody
+chroot -unobody -gnobody / /bin/sh
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Isolation forte (jail)
+
+Une jail est un changement de racine "sous stéroïde". Une jail permet
+de créer une isolation forte. Les processus fonctionnant dans la jail
+n'ont plus accès au reste du système et ne partage que la mémoire
+disponible dans la jail.
+
+D'autres systèmes d'exploitations ont mis en place ce type de
+fonctionnalité:
+
+ * zones (solaris)
+ * openvz (linux)
+ * lxc & cgroups (linux)
+
+En pratique, les jails sont utilisés depuis maintenant presque 20ans
+dans le monde Unix. Cette solution permet de mutualiser facilement les
+ressources d'un serveur en offrant une isolation forte et à bas
+coût. Étant donné que la virtualisation est opéré au niveau du noyau
+et non pas sous forme d'émulation (comme qemu, virtualbox ou xen), il
+n'y a pratiquement aucune perte de performance.
+
+Par ailleurs, si une faille de sécurité est trouvé dans le kernel, la
+jail pourra permettre d'accéder à cette faille malgré le fait qu'elle
+soit isolé du reste du système.
+
+== FreeBSD - Création d'une jail
+
+Une jail étant en quelque sorte un chroot amélioré, cette dernière a
+besoin d'un environnement pour être lancé. Cet environnement contient
+un ou plusieurs programmes voir un système complet. Pour faire simple,
+une jail est une installation de FreeBSD dans un répertoire choisis.
+
+Tout comme pour l'installation, ou la mise à jour, il est possible
+d'utiliser 2 méthodes.
+
+.Création depuis les binaires
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /tmp
+ARCH=$(uname -a)
+REL=$(uname -r|sed -E 's/^([0-9]+\.[0-9]+-RELEASE).*//')
+REPO=http://ftp.fr.freebsd.org/pub/FreeBSD/releases
+TARGET=$REPO/$ARCH/$REL
+fetch ${TARGET}/base.txz
+mkdir /path/to/your/jail
+cd /path/to/your/jail
+tar Jxvf /tmp/base.txz
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Création depuis les sources
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src
+make -j4 buildworld
+make -j4 installworld DESTDIR=/path/to/your/jail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Manipuler une jail (jail)
+
+La création d'une jail se fait via la commande
+https://www.freebsd.org/cgi/man.cgi?query=jail[`jail`], via des outils
+externes ou tout simplement via la bibliothèque
+https://svnweb.freebsd.org/base/head/lib/libjail/[libjail].
+
+.Création d'une jail
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail -c name=$jail_name path=/path/to/jail/root 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Modification d'une jail
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail -m $jail_name allow.sysvipc
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Suppression d'une jail
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail -r $jail_name
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - lister les jails (jls)
+
+La commande https://www.freebsd.org/cgi/man.cgi?query=jls[`jls`]
+permet de visualiser la liste des jails actives sur le système.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jls
+jls -n
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Paramétrer une jail (sysctl)
+
+Certains paramètre des jails ne sont configurables que depuis le
+kernel. https://www.freebsd.org/cgi/man.cgi?query=sysctl[`sysctl`]
+permet donc de jouer ou d'afficher certaines options concernant les
+jails.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sysctl security.jail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Jail et stack réseau dédié (VIMAGE)
+
+`VIMAGE` est une option du kernel FreeBSD permettant de créer, pour
+chaque nouvelle jail, une stack réseau dédié. Cette option offre alors
+à la nouvelle jail créée une interface loopback et la possibilité de
+gérer ses propres flux et paquets. Malheureusement, cette
+fonctionnalité étant encore considéré comme expérimentale, très peu de
+documentation est disponible, il est possible d'avoir des informations
+sur le fonctionnement directement dans le
+https://svnweb.freebsd.org/base/releng/10.3/sys/net/vnet.c?revision=296373&view=markup[code
+source].
+
+.Configuration du kernel
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src/sys/$(uname -m)/conf
+cp GENERIC VIMAGE
+echo "options VIMAGE" >> VIMAGE
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Compilation et installation du kernel
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src
+make -j4 buildkernel KERNCONF=VIMAGE
+make -j4 installkernel KERNCONF=VIMAGE
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Création d'une jail avec vnet
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail -c name=myjail path=/path/to/my/chroot vnet
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Raccordement au monde réel
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ifconfig epair0 create
+ifconfig bridge0 create up
+ifconfig bridge0 addm epair0a
+ifconfig bridge0 addm em0
+ifconfig epair0b vnet myjail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Jail et gestion de resource (RCTL)
+
+`RCTL` est une fonctionnalité récente du kernel
+(https://www.freebsd.org/releases/9.0R/relnotes.html[FreeBSD 9.0])
+permettant de gérer les ressources des processus et par extension, les
+ressources d'une jail. Cette option n'est pas compilée par défaut, il
+est donc nécessaire de créer un kernel dédié. La commande pour
+utiliser cette fonctionnalité se nomme
+http://www.freebsd.org/cgi/man.cgi?query=rctl[`rctl`]
+
+.Configuration du kernel
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src/sys/$(uname -m)/conf
+cp GENERIC RCTL
+echo "options RCTL" >> RCTL
+echo "options RACCT" >> RCTL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Compilation et installation du kernel
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src/
+make -j4 buildkernel KERNCONF=RCTL
+make -j4 installkernel KERNCONF=RCTL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Création d'une jail
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail -c name=rctljail path=/path/to/my/jail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Limitation des ressources avec `rctl`
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# limite le nombre de processus à 32 dans la jail rctl
+rctl -a jail:rctljail:maxproc:32
+
+# affiche les règles de ressources pour la jail rctljail
+rctl -l jail:rctljail
+
+# supprime toutes les règles pour la jail rctljail
+rctl -r jail:rctljail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - thin jail (introduction)
+
+Différentes versions de jails existent. La méthode la plus facile à
+déployer est la "huge-jail", elle contient directement une copie
+fonctionnelle du système. Malheureusement cette méthode à des
+inconvénients tel que le management du système et l'espace utilisé est
+proportionnel au nombre de jails déployé.
+
+Les thin-jails permettent de créer un système en lecture seul partagé
+par plusieurs jails. Les thins-jails peuvent se répartir elle-même en
+plusieurs méthodes de déploiement:
+
+ * partage de la racine du système hôte avec
+   https://www.freebsd.org/cgi/man.cgi?query=mount_nullfs[nullfs]
+ 
+ * partage d'un espace dédié en lecture seule avec
+   https://www.freebsd.org/cgi/man.cgi?query=mount_nullfs[nullfs]
+ 
+ * partage d'un espace dédié en lecture seule avec
+   https://www.freebsd.org/cgi/man.cgi?query=mount_unionfs[unionfs]
+
+Par ailleurs, les thin-jails utilisant nullfs partagent tous une
+arborescence du système de fichier similaire:
+
+.Création du répertoire pour le template
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mkdir thinjailtemplate
+cd thinjailtemplate
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Initialisation des répertoires appartenant à la thin-jail
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mkdir -p base dev etc media mnt proc root tmp var
+mkdir -p usr/games usr/local usr/src
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Initialisation des répertoires partagés de premier niveau
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ln -s bin     /base/bin
+ln -s boot    /base/boot
+ln -s lib     /base/lib
+ln -s libexec /base/libexec
+ln -s rescue  /base/rescue
+ln -s sbin    /base/sbin
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Initialisation des répertoires partagés de second niveau
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ln -s usr/include /base/usr/include
+ln -s usr/bin /base/usr/bin
+ln -s usr/libdata /base/usr/libdata
+ln -s usr/lib32 /base/usr/lib32
+ln -s usr/libexec /base/usr/libexec
+ln -s usr/sbin /base/usr/sbin
+ln -s usr/share /base/usr/share
+ln -s usr/lib /base/usr/lib
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Initialisation des droits d'accès
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+chmod 777 tmp
+chmod 700 root
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Si votre jail nécessite une sécurité importante, il est possible
+d'utiliser différents mécanismes pour éviter qu'un utilisateur mal
+intentionné dans la jail modifie la template précédemment crée. Nous
+pouvons utiliser les flags étendus au niveau du système de fichiers
+(via `chflags`)
+
+.Initialisation des flags `immutable` et `nounlink` avec `chflags`
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+chflags simmutable bin boot lib libexec rescue sbin
+chflags sunlnk bin boot lib libexec rescue sbin
+chflags simmutable usr/include usr/bin usr/libdata usr/lib32 \
+                   usr/libexec usr/sbin usr/share usr/lib
+chflags sunlnk usr/include usr/bin usr/libdata usr/lib32 \
+               usr/libexec usr/sbin usr/share usr/lib
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Attention, si vous voulez pouvoir supprimer simplement la jail après
+le déploiement, vous devrez supprimer les flags activés via la
+commande `chflags -R 0 /path/to/your/jail`. Effectivement, les flags
+configurés empechent la suppression ou la modification des fichiers
+possédant ces flags actifs.
+
+.Création de la template sous forme d'un tarball
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tar czvfpP ../template-thinjail.tgz thinjailtemplate
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - thin jail (racine système partagée)
+
+Cette méthode est la plus simple à créer, elle utilisable facilement
+sur un poste client et permet d'avoir un système de jails synchroniser
+avec le système hôte.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tar zxvf thinjailtemplate.tgz
+mv thinjailtemplate mynewjail
+mount -oro -tnullfs / mynewjail/base
+jail -c name=mynewjail path=$(pwd)/mynewjail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - thin jail (racine système dédié)
+
+Cette méthode permet de créer une racine dédiée contenant un
+environnement FreeBSD complet (world). Au lieu de monter directement
+la racine de l'hôte, nous montons en lecture seule avec nullfs cette
+racine partagée.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# initialisation de la racine partagée
+mkdir /path/to/sharedroot
+cd /usr/src
+make installworld DESTDIR=/path/to/sharedroot
+
+# initialisation de la template
+cd /path/to/directoryjail
+tar zxvf thinjailtemplate.tgz
+mv thinjailtemplate mysharedjail
+mount -oro -tnullfs /path/to/sharedroot mysharedjail/base
+jail -c name=mysharedjail path=$(pwd)/mysharedjail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - thin jail (unionfs)
+
+Cette méthode utilise les propriétés de
+l'https://www.freebsd.org/cgi/man.cgi?query=mount_unionfs[`unionfs`]
+permettant de monter un système de fichier sur un autre système de
+fichier sans cacher les fichiers présents sur le premier.
+
+Docker utilise cette solution avec les containers sous
+linux. Malheureusement, l'unionfs n'est pas un système de fichier
+stable et de nombreux problèmes peuvent altérer la stabilité ainsi que
+la sécurité de la jail voir du système hôte. Par conséquent, cette
+méthode ne sera donc pas présenté ici.
+
+== FreeBSD - Configuration d'une jail (jail.conf)
+
+https://www.freebsd.org/cgi/man.cgi?query=jail.conf[`jail.conf`] est
+un fichier de configuration permettant de sauvegarder la configuration
+d'une jail. Lors de la création d'une jail, la commande `jail` regarde
+d'abord si le fichier `/etc/jail.conf` existe et parse son contenu
+pour savoir si la jail demandé est bien présente dans ce
+fichier. Ci-dessous un exemple simple du fichier de configuration des
+jails.
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+$jail_roots = "/path/to/myroot";
+
+# configuration globale
+allow.sysvipc = 1;
+allow.socket_af = 1;
+allow.raw_sockets = 1;
+
+# configuration de la jail myjail
+myjail {
+  name = "myjail";
+  path = "${jail_roots}/myjail/root";
+  host = "new";
+  host.hostname = "myjail.localhost";
+  ip4 = "inherit";
+  ip6 = "inherit";
+}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Démarrage automatique d'une jail (rc.conf)
+
+Évidemment, il est possible de démarrer une jail au démarrage du
+système, et de l'arrêter lorsque celui-ci doit s'éteindre. Sous
+FreeBSD, la gestion des services se fait à partir du fichier
+https://www.freebsd.org/cgi/man.cgi?query=rc.conf[`rc.conf`] ou
+`rc.conf.local`. Depuis peu, il est aussi possible d'utiliser le
+fichier `/etc/rc.conf.d/jail`.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail_enable="YES"
+# jail_parallel_start="YES"
+# jail_list="myjail anotherjail"
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Il est éventuellement possible de configurer directement les jails via
+ces fichiers de configuration, mais cette méthode n'est plus
+recommandé depuis FreeBSD9 et FreeBSD10. Utiliser cette fonctionnalité
+dans les dernières versions de FreeBSD génèrera une configuration dans
+`/var/run/jail.myjailname.conf`:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jail_myjailname_rootdir="/path/to/jail"
+jail_myjailname_hostname="myjailname.local"
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Outils externe (ezjail)
+
+https://www.freebsd.org/cgi/man.cgi?query=ezjail&apropos=0&sektion=0&manpath=FreeBSD+11.0-RELEASE+and+Ports&arch=default&format=html[`ezjail`]
+est un outil permettant de gérer facilement des jails. Historiquement,
+il se trouve être l'un des outils les plus anciens. Il a le mérite
+d'être simple d'usage mais n'a pas réellement de flexibilité.
+
+.Installation
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# via les packages
+pkg install ezjail
+
+# via les ports
+cd /usr/ports/sysutils/ezjail
+make && make install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Utilisation
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ezjail-admin install
+ezjail-admin create myezjail
+ezjail-admin start myezjail
+ezjail-admin console myezjail
+ezjail-admin stop myezjail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Outils externe (iocage)
+
+https://www.freebsd.org/cgi/man.cgi?query=iocage&apropos=0&sektion=0&manpath=FreeBSD+11.0-RELEASE+and+Ports&arch=default&format=html[`iocage`]
+est un outil permettant de gérer facilement des jails.
+
+.Installation
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# via les packages
+pkg install iocage
+
+# via les ports
+cd /usr/ports/sysutils/iocage
+make && make install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+`iocage` utilise des fonctionnalités récentes qui ne sont pas par
+défaut dans le kernel GENERIC. `VIMAGE`, `RACCT` et `RCTL` devront
+alors être activé pour pouvoir utiliser toutes les options
+d'`iocage`. `ZFS` est aussi recommandé, les fonctions de snapshots,
+backup et réplication s'appuyant sur ce système de fichier.
+
+.Utilisation
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+iocage fetch
+iocage create tag=myjail
+iocage start myjail
+iocage stop myjail
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Outils externe (cbsd)
+
+https://www.freebsd.org/cgi/man.cgi?query=cbsd&apropos=0&sektion=0&manpath=FreeBSD+11.0-RELEASE+and+Ports&arch=default&format=html[`cbsd`]
+est un outil permettant de gérer des jails et des machines virtuelles
+bhyves. Il supporte un nombre important de fonctionnalité, tel que la
+gestion de nœuds, les backups, snapshots, la configuration via webui
+ou curse...
+
+.Installation
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# via les packages
+pkg install cbsd
+
+# via les ports
+cd /usr/ports/sysutils/cbsd
+make && make install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Une documentation plus que complète se trouve sur le
+https://www.bsdstore.ru/en/docs.html[site officiel de cbsd].
+
+== Annexe - Liens
+
+=== Pages du manuel
+
+ * https://www.freebsd.org/cgi/man.cgi?query=ps
+ * https://www.freebsd.org/cgi/man.cgi?query=top
+
+ * https://www.freebsd.org/cgi/man.cgi?query=kill
+ * https://www.freebsd.org/cgi/man.cgi?query=killall
+ * https://www.freebsd.org/cgi/man.cgi?query=pkill
+
+ * https://www.freebsd.org/cgi/man.cgi?query=chroot
+ * https://www.freebsd.org/cgi/man.cgi?query=jail
+
+=== Outils externes
+
+ * ezjail
+ ** https://www.freshports.org/sysutils/ezjail/
+ ** https://erdgeist.org/arts/software/ezjail/
+
+ * iocage
+ ** https://www.freshports.org/sysutils/iocage/
+ ** https://github.com/iocage/iocage
+
+ * cbsd
+ ** https://www.freshports.org/sysutils/cbsd/
+ ** https://www.bsdstore.ru/en/about.html
+
+=== Références
+
+ * https://www.freebsd.org/doc/en_US.ISO8859-1/books/design-44bsd/book.html#overview-process-management
+ * https://www.freebsd.org/doc/handbook/basics-processes.html
+ * https://www.netbsd.org/docs/internals/en/chap-processes.html
+ * https://www.dragonflybsd.org/docs/handbook/UnixBasics/#index9h2
+ * https://minixnitc.github.io/implementation.html
+ * http://sankofa.loc.edu/chu/web/Courses/Cosi410/Ch2/MINIX.html
+
+ * https://www.freebsd.org/doc/handbook/jails.html
+
+== Annexe - Bibliographie
+
+ * https://www.amazon.fr/Design-UNIX-Operating-System/dp/0132017997[The
+   Design of Unix Operating System]
+ 
+ * https://www.amazon.com/Design-Implementation-UNIX-Operating-System/dp/0201061961[The
+   Design and Implementation of the 4.3BSD Unix Operating System]
+ 
+ * https://www.amazon.com/Implementation-Operating-paperback-Addison-Wesley-Systems/dp/0132317923[The Design and Implementation of the 4.4BSD Unix Operating System]
+ 
+ * https://www.amazon.com/Design-Implementation-FreeBSD-Operating-System/dp/0201702452[The
+   Design and Implementation of the FreeBSD Operating System 1st
+   Edition]
+ 
+ * https://www.amazon.com/Design-Implementation-FreeBSD-Operating-System/dp/0321968972/ref=dp_ob_title_bk[The
+   Design and Implementation of the FreeBSD Operating System 2nd
+   Edition]
+
+ * http://zeus.nyf.hu/~bajalinov/LevOpRend/Tanenbaum_Woodhull_Operating%20Systems%20Design%20&%20Implementation%203rd%20Edition.pdf[Operating
+   System Design and Implementation]
+ 
+ * https://vowi.fsinf.at/images/b/bc/TU_Wien-Verteilte_Systeme_VO_(G%C3%B6schka)_-_Tannenbaum-distributed_systems_principles_and_paradigms_2nd_edition.pdf[Distributed Systems, Principles and Paradigms]
+

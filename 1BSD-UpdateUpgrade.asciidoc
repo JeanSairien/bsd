@@ -1,0 +1,667 @@
+= BSD#1 - Atelier Utilisation et Maintenance d'un système BSD
+:author:    Mathieu Kerjouan <contact@steepath.eu>
+:twitter:   https://twitter.com/niamtokik
+:backend:   slidy
+:max-width: 50em
+:icons:
+:iconsdir: /usr/local/etc/asciidoc/images/icons
+:images:
+:imagesdir: ./img/
+:copyright: Mathieu Kerjouan <contact@steepath.eu>
+
+//////////////////////////////////////////////////////////////////////
+Copyright (c) 2016, Mathieu Kerjouan <contact@steepath.eu>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//////////////////////////////////////////////////////////////////////
+
+== But de l'atelier
+
+ * Update d'un système FreeBSD et OpenBSD (release)
+ * Upgrade d'un système FreeBSD et OpenBSD (release)
+ * Compilation d'un kernel et d'un world
+
+== Les bonnes pratiques
+
+ 1. Avoir des sauvegardes du système et des données.
+ 2. Lire la documentation et les releases notes.
+ 3. Planifier une solution de rollback.
+ 4. Faire une (ou plusieurs) update/upgrade de test.
+ 5. Réaliser l'update ou l'upgrade.
+
+ * Si le système est critique, s'assurer qu'il soit redondé.
+ * Si les données clientes ne sont pas déportés, faites un état
+   des lieux avant d'intervenir.
+ * Ne jamais hésiter à lire les logs.
+ * Ne jamais oublier de prendre des notes.
+ * Connaitre l'architecture de la plateforme ainsi que les outils
+   utilisés dessus.
+
+== OpenBSD - Installation
+
+image:openbsd-59-installation.gif[]
+
+== OpenBSD - Update
+
+L'update consiste à mettre à jour la version courante
+d'OpenBSD. L'équipe d'OpenBSD fournit des notices explicatives ainsi
+que des patchs sous forme
+https://www.openbsd.org/security.html[d'erratas].
+
+Par exemple, si vous utilisez la version 6.0 et qu'un bug a été
+détecté, un patch est fournit par l'équipe, ce patch est mis en ligne
+sur le site official ainsi que sur les différents repository. Aucune
+modification profonde du système n'est effectuée.
+
+== OpenBSD - Update base et package via openup
+
+https://www.mtier.org/[m:tier] fournit depuis maintenant plusieurs
+version d'OpenBSD un
+http://www.undeadly.org/cgi?action=article&sid=20110420080633[support
+sur le long terme], que ce soit pour les packages ou pour le core, via
+l'utilitaire https://www.mtier.org/solutions/apps/openup/[openup].
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ftp https://stable.mtier.org/openup
+openup -c
+openup
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Il est aussi possible de passer par leur
+https://stable.mtier.org/[repository public] pour récupérer les
+packages à jour:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+REPO=https://stable.mtier.org
+ftp -o /etc/signify/mtier-60-pkg.pub ${REPO}/mtier-60-pkg.pub
+PKG_PATH=${REPO}/updates/$(uname -r)/$(arch -s):${PKG_PATH}
+export PKG_PATH
+pkg_add -u
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Update via les sources (récupération)
+
+Récupération des sources pour la base et xenocara
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+REL=$(uname -r | sed -Ee 's/\./_/' -e 's/.*/OPENBSD_&/')
+cd /usr
+cvs -danoncvs@anoncvs.eu.openbsd.org:/cvs -qz3 co -Pr${REL} src
+cvs -danoncvs@anoncvs.eu.openbsd.org:/cvs -qz3 co -Pr${REL} xenocara
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ou, si les données sont déjà présentes, mise à jour des sources pour
+la base et xenocara:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+REL=$(uname -r | sed -Ee 's/\./_/' -e 's/.*/OPENBSD_&/')
+cd /usr/src
+cvs -qz3 up -dP
+cd /usr/xenocara
+cvs -qz3 up -dP
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Update via les sources (kernel)
+
+backup de l'ancien kernel fonctionnel
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cp -p /bsd /bsd.old
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Compilation et installation du kernel GENERIC:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src/sys/arch/$(uname -p)/conf
+config GENERIC
+cd /usr/src/sys/arch/$(uname -p)/compile/GENERIC
+make && make install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pour ceux qui utilisent du multicore/multiprocesseur, GENERIC.MP:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src/sys/arch/$(uname -p)/conf
+config GENERIC.MP
+cd /usr/src/sys/arch/$(uname -p)/compile/GENERIC.MP
+make && make install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Update via les sources (userland)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src
+make obj && make depend && make
+make install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Update via les sources (xenocara/X11)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/xenocara
+make bootstrap
+make obj
+make build
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Update des ports (binaires)
+
+Il est possible que certains package soit à updater. `pkg_add` permet
+de réaliser simplement cette tâche:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pkg_add -u
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Dans le cas où vous auriez un parc avec des paquets spéciaux (options
+particulière buildé à la main) ou plusieurs machines à mettre à jour,
+il est préférable d'utiliser http://man.openbsd.org/dpb[dpb] qui est
+le builder sous OpenBSD.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pkg_info -aP | perl -ane 'print $_ if $_ =~ m:^\w+/\w+:' > /tmp/pkg_list
+cd /usr/ports/infrastructure
+./dpb -P /tmp/pkg_list
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Update des ports (sources)
+
+Si vous n'avez pas l'arbre des ports, vous pouvez le récupérer et
+l'extraire dans `/usr/ports`.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+REL=$(uname -r | sed -Ee 's/\./_/' -e 's/.*/OPENBSD_&/')
+cd /usr
+cvs -danoncvs@anoncvs.eu.openbsd.org:/cvs -qz3 co -Pr${REL} ports
+cd ports
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Si vous l'avez déjà, une simple mise à jour de cvs via `cvs update`
+récupèrera automatiquement les changements. Dans le cas où vous auriez
+beaucoup de paquets, utiliser http://man.openbsd.org/dpb[dpb] serait
+plus approprié.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/ports
+cvs -qz3 up -dP
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Upgrade
+
+L'upgrade consiste à passer d'une ancienne release vers la nouvelle
+release (par exemple 5.9 vers 6.0). Ce n'est pas une action
+anodyne. OpenBSD étant un système d'exploitation "artisanalle" des
+modifications profondes peuvent impactés le système.
+
+L'équipe d'OpenBSD fournit un
+https://www.openbsd.org/faq/upgrade60.html[guide] pour chaque upgrade,
+expliquant les précautions à prendre ainsi que les modifications
+effectuées.
+
+Avant une upgrade, il est important de s'assurer d'avoir des
+sauvegardes ainsi que d'avoir une méthodologie de rollback. Si vous
+upgradez depuis un serveur distant, l'accès à une console et à un
+média virtuel peux sauver votre journée.
+
+== OpenBSD - Upgrade via bsd.rd
+
+https://www.openbsd.org/faq/faq4.html#bsd.rd[`bsd.rd`] est le kernel
+ramdisk dédié pour l'installation d'OpenBSD. Il contient tous les
+outils nécessaires pour l'installation du système ou sa récupération
+en cas de problème. Lorsque vous installez votre système via un cdrom
+ou une clé usb, c'est ce kernel qui est utilisé et chargé en mémoire.
+
+Il y a donc plusieurs méthodes pour utiliser cette solution, mais
+nécessites toutes un accès à une console (excepté pour l'installeur
+automatique).
+
+== OpenBSD - Upgrade via bsd.rd (cdrom)
+
+La méthode classique est de récupérer les images ISO officielles, puis
+de la https://www.openbsd.org/faq/faq13.html#burnCD[graver] sur un
+cdrom ou sur un média bootable (clé usb). L'upgrade se fait alors en
+bootant sur ce média et en sélectionnant l'option "Upgrade" (`U`).
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# cdrom installeur 
+ftp http://ftp.eu.openbsd.org/pub/OpenBSD/6.0/$(uname -q)/cd60.iso
+cdio -f cdXc cd60.iso
+
+# cdrom installeur + distribution
+ftp http://ftp.eu.openbsd.org/pub/OpenBSD/6.0/$(uname -q)/install60.iso
+cdio -f cdXc install60.iso
+
+# image disque installeur + distribution
+ftp http://ftp.eu.openbsd.org/pub/OpenBSD/6.0/$(uname -q)/install60.fs
+dd if=install60.fs of=/dev/sdXc
+
+# reboot du système
+shutdown -r now
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Upgrade via bsd.rd (local)
+
+Une autre méthode est de récupérer directement le kernel `bsd.rd` via
+les dépôts officiels et de le copier à la racine. Après un
+redémarrage, lors de l'apparition du prompt du bootloader, ils suffit
+alors de booter directement sur le kernel `bsd.rd`.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /
+cp -p bsd.rd bsd.rd.old
+ftp http://ftp.eu.openbsd.org/pub/OpenBSD/6.0/$(uname -q)/bsd.rd
+shutdown -r now
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Upgrade via les sources
+
+L'upgrade via les sources comporte de nombreux risques. Cette méthode
+est utilisable seulement par les personnes maitrisant déjà le
+système. Elle n'est pas forcement complexe mais nécessite de valider
+des étapes et d'avoir (encore une fois) l'assurance de récupérer la
+main sur le système. Une upgrade via les sources se déroule de la façon suivante:
+
+ 1. backup des données et lecture de la https://www.openbsd.org/60.html[release note]
+ 2. compilation, installation du nouveau kernel
+ 3. compilation, installation de l'userland, puis reboot
+ 4. upgrade /dev et le bootloader
+ 5. upgrade /etc et les firmware
+
+== OpenBSD - Upgrade via les sources (backup)
+
+Le projet OpenBSD ne fournit tel quel des solutions clés en main pour
+la journalisation des backups ou, comme d'autres OS, des outils pour
+créer des snapshots. Par ailleurs différents scripts de maintenances
+fonctionnent périodiquement.
+
+Les fichiers présents dans
+http://man.openbsd.org/OpenBSD-current/man5/changelist.5[`/etc/changelist`]
+sont sauvegardés à l'aide du script
+http://man.openbsd.org/OpenBSD-current/man8/daily.8[`daily`] vers le
+répertoire `/var/backup`. Par défaut, ce script est exécuté tous les
+jours à 1h30 du matin et se trouve dans la crontab de l'utilisateur
+`root`. Il est aussi possible d'avoir une copie de la racine en
+configurant la variable `ROOTBACKUP=1` dans le fichier
+`/etc/daily.local`.
+
+http://man.openbsd.org/OpenBSD-current/man8/dump.8[`dump`] et `rdump`
+permettent quant à eux de faire un dump des filesystems utilisés. Le
+dump peut être alors restauré via la commande
+http://man.openbsd.org/restore.8[`restore`].
+
+Enfin, de nombreux outils présents dans les ports existent, permettant
+d'avoir les fonctionnalités désirées.
+
+== FreeBSD - Installation
+
+image:freebsd-103-installation.gif[]
+
+== FreeBSD - Update
+
+Dans le monde de FreeBSD l'update consiste à mettre à jour la version
+courante de son système pour corriger des bugs ou des failles de
+sécurité.
+
+Le projet FreeBSD utilise plusieurs vecteurs de communication pour
+diffuser les mises à jours:
+
+ * https://www.freebsd.org/security/advisories.html[Security Advisories]
+ * https://www.freebsd.org/security/notices.html[Errata Notices]
+ * https://lists.freebsd.org/pipermail/freebsd-announce[Mailing-list announce]
+ * https://twitter.com/freebsderrata×[@freebsderrata]
+ * https://twitter.com/freebsdsecurity[@freebsdsecurity]
+ * https://twitter.com/VuXML[@VuXML] (base et ports)
+
+== FreeBSD - Update world et kernel (binaire)
+
+https://www.freebsd.org/cgi/man.cgi?query=freebsd-update[`freebsd-update`]
+est un utilitaire permettant de simplifié les mises à jour en offrant
+des patchs binaires à appliquer.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+freebsd-update fetch
+freebsd-update install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+En cas de problème, il est toujours possible de faire un rollback:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+freebsd-update rollback
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Si votre kernel, ou certains de vos outils ont été modifiés, il est
+préférable de configurer `freebsd-update` pour lui dire de faire une
+mise à jour sélective en éditant le fichier `/etc/freebsd-update.conf`
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Components world kernel
+IgnorePaths /path/to/your/modified/software
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Update package (pkg)
+
+L'update des packages se fait simplement:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pkg update && pkg upgrade
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[NOTE] Si vous utilisez les repository FreeBSD officiels, ces derniers
+suivent la version courante des ports. Si vous désirez utiliser des
+logiciels freezé pendant plusieurs mois, il est possible d'automatiser
+le build avec poudrière.
+
+== FreeBSD - Update ports (manuellement)
+
+Cette méthode est fastidieuse, surtout si vous devez mettre à jour de
+nombreux serveurs. 
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# récupération de la liste des packages installés
+LIST=$(pkg info -oa | awk '{ print $NF }' | sort)
+
+# bulk build
+for package in $LIST
+do
+  cd /usr/ports/${package} && make BATCH=yes && make package
+done
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Updates ports (portmaster)
+
+https://www.freebsd.org/cgi/man.cgi?query=portmaster[portmaster] permet
+de gérer les ports simplement. La commande pour la mise à jour est
+simple:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+portmaster -a
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Update ports (poudrière)
+
+https://www.freebsd.org/cgi/man.cgi?query=poudriere[poudrière] est
+builder relativement récent permettant de packager à la volée une
+liste de package.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# création d'une jail
+poudriere jail -c -j jail
+
+# création d'un ports tree
+poudriere ports -c -p ports
+
+# bulk build
+poudriere bulk -j jail -p ports -f /path/to/pkg_list
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Upgrade
+
+FreeBSD sépare l'upgrade en 2 catégorie, l'upgrade mineur
+(minor-upgrade) et les upgrades majeurs (major-upgrade).
+
+L'upgrade mineur consiste à upgrader la version de FreeBSD vers une
+version mineur. Par exemple, de la 10.1 vers la 10.2, ou de
+la 10.2 vers la 10.3. Cette upgrade comporte peu de risque.
+
+L'upgrade majeur consiste à upgrader une version majeur de FreeBSD
+vers une autre version majeur. Par exemple 9.3 vers 10.1 ou encore
+10.3 vers 11.0. Cette upgrade comporte des risques car de nombreux
+changements sont apportés.
+
+== FreeBSD - Upgrade (backup)
+
+Énormément d'outils sont à la disposition de l'utilisateur désirant
+faire un backup de FreeBSD avant une upgrade:
+
+ * `mksnap_ffs`
+ * `zfs snapshot` + `zfs send` + `zfs receive`
+ * `dump` + `restore`
+
+== FreeBSD - Upgrade (freebsd-update)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+freebsd-update upgrade
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Upgrade (binaire)
+
+Cette méthode comporte de nombreux risque et n'est pas recommandée
+pour la mise à jour d'un serveur, mais plutôt pour la mise à jour des
+jails. Dans tous les cas, cette méthodologie reste fonctionnelle mais
+comporte de nombreux risques.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+REPO=http://ftp.freebsd.org/pub/FreeBSD/releases/amd64/11.0-RELEASE/
+mkdir /usr/rel
+cd /usr/rel
+for i in base doc kernel lib32 ports src test
+do
+  fetch ${REPO}/${i}.txz
+done
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Un backup de l'ancien kernel fonctionnel est nécessaire, nous
+installons ensuite le nouveau kernel précédemment téléchargé.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /boot
+cp -rp kernel kernel.old
+cd /
+tar xJvfp /usr/rel/kernel.txz
+reboot
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+finalement, après un reboot, nous pouvons installer l'userland.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /
+for i in base doc lib32
+do
+  tar xJvfp /usr/rel/${i}.txz
+done
+reboot
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+pour finir, les tâches classiques après une upgrade:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mergemaster -a
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD - Upgrade (source)
+
+La méthode reste sensiblement similaire à la méthode binaire, à part
+qu'un build du kernel et du world est fait au lieu de récupérer les
+binaires sur les dépôts officiels.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr
+svnlite co https://svn.freebsd.org/base/releng/11.0 src
+cd src
+make buildkernel
+make buildworld
+make installkernel
+reboot
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Finalement, après un reboot, l'installation du world est requis.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd /usr/src
+make installworld
+make check-old
+make delete-old
+sysmerge -a
+reboot
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD Update/Upgrade (notes)
+
+ * Si vous utilisez ZFS, il sera important de mettre à jour le
+   bootloader pour activer de nouvelles fonctionnalités
+   
+ * Différents outils nécessitent des modifications après une
+   intervention après une update ou une upgrade. Habituellement,
+   ces informations se trouvent au niveau de la release note.
+
+== Conclusion
+
+Il nous reste à voir la maintenance pour les systèmes NetBSD et
+DragonFlyBSD. L'esprit reste globalement le même. DragonFlyBSD étant
+un fork de FreeBSD de nombreux principes sont restés.
+
+NetBSD étant le "père" d'OpenBSD, les modes opératoires restent
+sensiblement les mêmes. L'utilisation du script `build.sh` rendant
+l'intervention plus aisée dans certains cas.
+
+ * Des questions? (si il y a le temps! :p)
+
+== Annexe - OpenBSD (liens)
+
+=== Manual
+
+ * http://man.openbsd.org/OpenBSD-current/man1/help.1
+ * http://man.openbsd.org/afterboot.8
+
+ * Build:
+ ** http://man.openbsd.org/OpenBSD-current/man8/config.8
+ ** http://man.openbsd.org/OpenBSD-current/man1/cvs.1
+ ** http://man.openbsd.org/OpenBSD-current/man1/make.1
+
+ * Backup:
+ ** http://man.openbsd.org/OpenBSD-current/man5/changelist.5
+ ** http://man.openbsd.org/OpenBSD-current/man8/dump.8
+ ** http://man.openbsd.org/OpenBSD-current/man8/restore.8
+ ** http://man.openbsd.org/OpenBSD-current/man1/scp.1
+ ** http://man.openbsd.org/sftp.1
+ ** http://man.openbsd.org/OpenBSD-current/man1/ftp.1
+ 
+ * Ports:
+ ** http://man.openbsd.org/OpenBSD-current/man7/ports.7
+ ** http://man.openbsd.org/OpenBSD-current/man5/mk.conf.5
+ ** http://man.openbsd.org/bsd.port.mk.5
+ ** http://man.openbsd.org/port-modules.5
+ ** http://man.openbsd.org/dpb.1
+
+=== FAQ
+
+ * https://www.openbsd.org/faq/upgrade60.html
+
+=== External resources
+
+ * https://stable.mtier.org/
+ * https://bsdly.blogspot.fr/2012/07/keeping-your-openbsd-system-in-trim.html
+
+== Annexe - FreeBSD (liens)
+
+=== Manual
+
+ * https://www.freebsd.org/cgi/man.cgi?freebsd-update
+
+ * Backup:
+ ** https://www.freebsd.org/cgi/man.cgi?query=dump
+ ** https://www.freebsd.org/cgi/man.cgi?query=restore
+ ** https://www.freebsd.org/cgi/man.cgi?query=zfs
+ ** https://www.freebsd.org/cgi/man.cgi?query=periodic
+ ** https://www.freebsd.org/cgi/man.cgi?query=periodic.conf
+
+ * Build:
+ ** https://www.freebsd.org/cgi/man.cgi?query=svn
+ ** https://www.freebsd.org/cgi/man.cgi?query=build
+ ** https://www.freebsd.org/cgi/man.cgi?query=release
+ ** https://www.freebsd.org/cgi/man.cgi?query=make.conf
+ ** https://www.freebsd.org/cgi/man.cgi?query=src.conf
+
+ * Ports:
+ ** https://www.freebsd.org/cgi/man.cgi?query=ports
+ ** https://www.freebsd.org/cgi/man.cgi?query=pkg
+ ** https://www.freebsd.org/cgi/man.cgi?query=portsnap
+
+=== Handbook
+
+ * https://www.freebsd.org/doc/handbook/updating-upgrading.html
+ * https://www.freebsd.org/doc/en_US.ISO8859-1/articles/releng/
+ * https://www.freebsd.org/doc/en_US.ISO8859-1/books/developers-handbook/
+
+=== External resources
+
+ * www.bsdnow.tv/tutorials/upgrade
+ * https://www.digitalocean.com/community/tutorials/how-to-upgrade-freebsd-from-version-10-2-to-10-3
+ * https://www.digitalocean.com/community/tutorials/an-introduction-to-basic-freebsd-maintenance
+
+== Annexe - Backup & Rollback
+
+=== ZFS solutions
+
+ * https://www.freshports.org/sysutils/beadm/
+ * https://www.freshports.org/sysutils/zfs-periodic/
+ * https://www.freshports.org/sysutils/zfs-replicate/
+ * https://www.freshports.org/sysutils/zfs-snapshot-mgmt/
+ * https://www.freshports.org/sysutils/zfstools/
+ * https://www.freshports.org/sysutils/zfsnap2/
+ * https://www.freshports.org/sysutils/zetaback/
+ * https://www.freshports.org/sysutils/zogftw/
+
+=== Other solutions
+
+ * https://www.freshports.org/misc/amanda-server/
+ * https://www.freshports.org/sysutils/bacula-server/
+ * https://www.freshports.org/sysutils/zbackup/
+ * https://www.freshports.org/sysutils/rsyncbackup/
+ * https://www.freshports.org/sysutils/burp/
+ * https://www.freshports.org/sysutils/cpdup/
+ * https://www.freshports.org/sysutils/duplicity/
+ * https://www.freshports.org/sysutils/rdup/
+ * https://www.freshports.org/sysutils/restic/
+ * https://www.freshports.org/sysutils/tarsnap/

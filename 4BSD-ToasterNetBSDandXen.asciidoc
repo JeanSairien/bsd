@@ -1,0 +1,203 @@
+= BSD#4 - NetBSD et la Virtualisation avec Xen
+:author:    Mathieu Kerjouan <contact@steepath.eu>
+:twitter:   https://twitter.com/niamtokik
+:backend:   slidy
+:max-width: 50em
+:icons:
+:iconsdir: /usr/local/etc/asciidoc/images/icons
+:images:
+:imagesdir: ./img/
+:copyright: Mathieu Kerjouan <contact@steepath.eu>
+
+//////////////////////////////////////////////////////////////////////
+Copyright (c) 2016, Mathieu Kerjouan <contact@steepath.eu>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//////////////////////////////////////////////////////////////////////
+
+== But de l'atelier
+
+ * Présentation de NetBSD
+ * Présentation de Xen
+ * Utilisation de LVM
+ * Configuration de NetBSD en Dom0
+ * Déploiement de VM
+
+== NetBSD - Introduction
+
+NetBSD est l'un des descendant direct des BSD originels, tout comme
+FreeBSD. NetBSD est orienté système embarqué et est particulièrement
+adapté pour les systèmes n'ayant que très peu de ressources. Il
+possède de nombreuses caractéristiques similaires avec ses cousins
+
+== Xen - Introduction
+
+Xen est une solution de virtualisation sous forme d'hyperviseur. Xen
+s'installe entre le kernel hote (dans notre cas NetBSD) et le
+matériel. Xen devient alors en quelque sorte le matériel d'un point de
+vue du kernel NetBSD, il est donc nécessaire d'avoir un kernel
+particulier.
+
+Le système d'exploitation permettant d'avoir le controle sur les
+machines virtuelles et qui se trouve directement en dessous du kernel
+Xen se nomme domain-0 (DomU). Il possède tous les droits sur les
+autres kernels ou machines virtuelles controlé par Xen, ces derniers
+s'appellant domain-u (ou DomU).
+
+== NetBSD - Installation de xenutils via les binaire (pkg_add)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Installation de xenutils via les sources (pkgsrc)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Configuration du kernel Dom0 via les binaires (ftp)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Configuration du kernel Dom0 via les sources
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Configuration de kernel en DomU
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Présentation de LVM
+
+LVM (Logical Volume Management) est un outil qui a été créé pour
+simplifier le management de disques dur. Grandement utilisé dans le
+monde linux, NetBSD est l'un des seul systèmes BSD à avoir intégré ce
+mécanisme.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lvm pv display
+lvm vg display
+lvm lv display
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Utilisation de LVM (pv)
+
+Un PV (Physical Volume) est tout simplement disque ou un espace
+mémoire contenant une structure la définissant comme faisant partis de
+LVM.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lvm pv display
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Utilisation de LVM (vg)
+
+Un VG (Virtual Group) est un groupement de PV. Il permet d'ajouter,
+modifier ou supprimer à la volée l'espace disque disponible sur un ou
+plusieurs PV.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lvm vg display
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== NetBSD - Utilisation de LVM (lv)
+
+Un LV (Logical Volume) est l'équivalent d'une partition
+traditionnelle. Un LV représente une partie de mémoire allouée sur un
+VG.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lvm lv display
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Xen - Visualisation des VMs (xl)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Xen - Déploiement d'une VM (xl)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Xen - Démarrage d'une VM (xl)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Xen - Accès à la VM (xl)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Xen - Arrêt d'une VM (xl)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Xen - Configuration réseau et Machine Virtuelle (ifconfig)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Annexe - Liens
+
+=== Xen
+
+ * https://xenbits.xen.org/docs/4.6-testing/
+
+=== NetBSD/Xen
+
+ * https://wiki.netbsd.org/ports/xen/howto/
+ * https://wiki.netbsd.org/ports/xen/
+ * https://wiki.netbsd.org/tutorials/how_to_set_up_a_xen_dom0/
+ * https://wiki.netbsd.org/tutorials/how_to_set_up_a_guest_os_using_xen3/
+
+=== NetBSD
+
+ * http://netbsd.gw.com/cgi-bin/man-cgi?lvm
+ * https://www.netbsd.org/docs/guide/en/chap-build.html
+ * https://wiki.netbsd.org/tutorials/how_to_build_netbsd-current/
+ * https://www.netbsd.org/docs/guide/en/chap-kernel.html
+
+ * https://www.netbsd.org/docs/software/packages.html
+ * https://www.netbsd.org/docs/pkgsrc/
