@@ -133,3 +133,13 @@ sudo qemu-system-x86_64 /dev/sdb -m 1M -enable-kvm
 
 echo $SHELL -> version de shell
 
+ZRXfMjn7d0
+
+
+------ENCRYPTION -------
+
+type de hash: 
+
+sha512
+
+aes256
