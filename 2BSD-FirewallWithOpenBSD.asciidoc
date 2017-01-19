@@ -1,0 +1,756 @@
+= BSD#2 - Configuration d'un firewall sous OpenBSD
+:author:    Mathieu Kerjouan <contact@steepath.eu>
+:twitter:   https://twitter.com/niamtokik
+:backend:   slidy
+:max-width: 50em
+:icons:
+:iconsdir: /usr/local/etc/asciidoc/images/icons
+:images:
+:imagesdir: ./img/
+:copyright: Mathieu Kerjouan <contact@steepath.eu>
+
+//////////////////////////////////////////////////////////////////////
+Copyright (c) 2016, Mathieu Kerjouan <contact@steepath.eu>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//////////////////////////////////////////////////////////////////////
+
+== But de l'atelier
+
+ * Comprendre les bases du fonctionnement d'un réseau
+ * Configurer le réseau sous OpenBSD
+ * Configurer le firewall Packet Filter
+ * Diagnostiquer un problème sur le réseau
+
+image::itcrowd-internet.gif[]
+
+== Généralité - Architecture en paquet
+
+Un paquet pourrait avoir cette définition:
+
+ * Une suite de bits (0 ou 1) transitant sur une interconnexion
+   d'équipement ;
+
+ * Une suite de bit avec un découpage logique en plusieurs parties ;
+
+ * Des protocoles et des structures de données sont définis par des
+   entités spécifiques (RFC, https://www.ietf.org/[IETF],
+   https://www.ieee.org[IEEE]...) garantissant une compréhension entre
+   les équipements.
+
+== Généralité - Architecture en paquet (exemple)
+
+Ci-dessous l'exemple d'un paquet reçu sur une interface:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+0000001000000000000000000000000001000101000000000000000000100001101000
+0000110110000000000000000001000000000100010000000000000000011111110000
+0000000000000000000101111111000000000000000000000001011001000001101100
+0100010101110000000000000011011111111000100000011101000110010101110011
+0111010000001010
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Généralité - Architecture en paquet (exemple)
+
+Le même paquet convertit en hexadécimal:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+0200 0000 4500 0021 a036 0000 4011 0000
+7f00 0001 7f00 0001 641b 115c 000d fe20
+7465 7374 0a
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Généralité - Architecture en paquet (exemple)
+
+Finalement, sa signification est basée sur les standards:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+02000000   => Protocole IP (réseau)
+4          => Version 4 du protocole IP
+5          => taille de l'en-tête (20 octets)
+00         => Service
+0021       => Taille total (33octets)
+a35f       => identification
+00         => drapeau
+00         => décallage
+40         => TTL
+11         => Protocole UDP (transport)
+0000       => Checksum
+7f000001   => adresse source (127.0.0.1)
+7f000001   => adresse destination 127.0.0.1)
+e038       => port Source (57400)
+115c       => port de destination (4444)
+000d       => taille
+fe20       => checksum
+746573740a => donnée (test\n)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Généralité - Architecture en paquet (couches)
+
+Le paquet peut alors être découpé en plusieurs couches contenant
+chacune des informations différentes en fonction des standards. Le
+modèle OSI définit en 7 couches:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 - Application
+  6 - Présentation
+  5 - Session
+  4 - Transport
+  3 - Réseau
+  2 - Lien de donnée
+  1 - Physique
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Un firewall agit habituellement sur les couches 2, 3 et 4.
+
+== Généralité - Physique
+
+La couche physique représente le flux de donnée transposé au monde
+réel sous forme d'ondes électromagnétiques ou lumineuses.
+
+== Généralité - Liaison de donnée
+
+La liaison de donnée est utilisé pour faire un routage local, basé sur
+l'adresse MAC pour le protocole Ethernet. Cette couche fait références
+aux hubs ou switchs (commutateurs) pour les équipements mais aussi aux
+bridges pour le software et l'administration réseau.
+
+== Généralité - Réseau
+
+La couche réseau est utilisée pour marquer un paquet. Le
+protocole réseau habituellement utilisé est IPv4 ou IPv6.
+
+== Généralité - Transport
+
+La couche transport est la partie permettant d'offrir un service. 2
+protocoles sont utilisés sur cette couche: UDP ou TCP.
+
+ * UDP: sans connexion, aucunes garanties, prioritaire
+ * TCP: avec connexion, garanties (retransmission, checksum...)
+
+== Généralité - Transport (UDP)
+
+UDP envoi les données sans aucune garanties de réception, et sans
+possibilité de retransmission. Ce sont les protocoles situés au-dessus
+d'UDP (couche session, présentation, application) qui doivent
+effectuer ces fonctionnalités.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tcpdump -evvvi lo0 udp port 5555
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+nc -kul 5555
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo "test" | nc -u 127.0.0.1 5555
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Généralité - Transport (TCP)
+
+TCP négocie une connexion. Le client doit d'abord demander au serveur
+de se connecter (poignée de main en 3 étapes – Three Way Handshake). À la fin de cette
+étape, un état est gardé entre les deux serveurs, pouvant être arrêté
+explicitement (reset ou fin de connexion) ou implicitement (timeout).
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tcpdump -evvvi lo0 tcp port 5555
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+nc -kl 5555
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo "test" | nc 127.0.0.1 5555
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Introduction
+
+OpenBSD est un système prévu pour la communication réseau. Ce système
+est d'ailleurs réputé pour la grande qualité de ses outils, utilisés
+partout dans le monde et ayant une grande importance dans
+l'administration des systèmes:
+
+ * https://www.openssh.com/[OpenSSH]
+ * http://www.openntpd.org/[OpenNTPD]
+ * http://www.openbgpd.org/[OpenBGPD]
+ * https://www.opensmtpd.org/[OpenSMTPD]
+ * https://www.libressl.org/[LibreSSL]
+ * et https://www.openbsd.org/innovations.html[bien d'autres]...
+
+== OpenBSD - Utiliser ifconfig
+
+http://man.openbsd.org/OpenBSD-current/man8/ifconfig.8[ifconfig] est
+la commande de base utilisé par de nombreux systèmes pour configurer
+le réseau. La grande majorité des systèmes BSD utilisent ifconfig et
+permet de:
+
+ - afficher des informations
+ - créer des interfaces virtuelles
+ - configurer des interfaces réseaux physiques ou virtuelles
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ifconfig
+ifconfig -a
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Récupérer une adresse IPv4 (dhcp)
+
+Dans le cadre d'une utilisation comme poste de travail, la
+configuration d'une adresse réseau se fait automatiquement. Le
+protocole utilisé pour IPv4 se nomme
+https://www.ietf.org/rfc/rfc2131.txt[DHCP] (Dynamic Host Configuration
+Protocol). Un serveur se trouvant sur le réseau "loue" (lease) une
+adresse IP à un client qui demande une adresse sur ce même réseau (Bail DHCP). La
+commande permettant de récupérer une adresse ip se nomme
+http://man.openbsd.org/OpenBSD-current/man8/dhclient.8[dhclient].
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+dhclient em0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Si le serveur possède l'information nécessaire et que le client
+l'accepte, cette configuration se trouve généralement dans
+http://man.openbsd.org/dhclient.leases.5[`/var/db/dhclient.leases.$interface`]
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cat /var/db/dhclient.leases.em0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Configurer une adresse IPv4 (manuellement)
+
+Dans le cas d'une utilisation serveur, la configuration manuelle et
+statique d'une adresse IP est recommandée. Pour se faire, nous pouvons
+utiliser
+http://man.openbsd.org/OpenBSD-current/man8/ifconfig.8[ifconfig]:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ifconfig em0 192.168.42.3 255.255.255.0 up
+# ou
+ifconfig em0 192.168.42.3/24 up
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ou les fichiers de configurations:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo "inet 192.168.42.3 255.255.255.0" > /etc/hostname.em0
+echo "up" >> /etc/hostname.em0
+sh /etc/netstart em0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Une interface peut avoir plusieurs adresses IP, nommée alias (interface virtuelle):
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ifconfig em0 alias 192.168.42.3/24
+ifconfig em0 alias 192.168.43.1/24
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - IPv6
+
+IPv6 est le successeur d'IPv4. IPv6 utilisé une adresse de 128bits au
+lieu de 32bits pour son prédécesseur. Les adresses IPv6 se configurent
+globalement de la même façon qu'une adresse IPv4:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ifconfig em0 inet6 fdf3:7c3f:205c:14a1::43/64 up
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ou grâce aux fichiers de configurations:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo "inet6 fdf3:7c3f:205c:14a1::43/64" > /etc/hostname.em0
+echo "up" >> /etc/hostname.em0
+sh /etc/netstart em0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Diagnostique (ping, ping6)
+
+Le premier moyen pour effectuer un diagnostic afin de vérifier si le réseau est actif, est
+d'utiliser le protocole https://tools.ietf.org/html/rfc792[ICMP]
+(Internet Control Message Protocol) via la commande
+http://man.openbsd.org/OpenBSD-current/man8/ping.8[ping]. Ce protocole
+permet d'envoyer des paquets spéciaux donnant accès à diverses
+informations.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ping 127.0.0.1
+ping 192.168.42.1
+ping 8.8.8.8
+ping www.steepath.eu
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ping6 ::1
+ping6 google.fr
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Diagnostique (traceroute, traceroute6)
+
+http://man.openbsd.org/OpenBSD-current/man8/traceroute.8[traceroute]
+permet d'effectuer un diagnostic sur le chemin emprunter par un
+paquet. Il se base sur plusieurs protocole (ICMP, UDP et/ou TCP) pour
+permettre de "tracer" le chemin d'un paquet. Son fonctionnement est
+simple: quand un paquet est envoyé, un compteur de saut est
+configuré. À chaque passage sur un équipement, le compteur est
+décrémenté. Lorsque le compteur arrive à 0, un paquet ICMP est renvoyé
+à l'émetteur. Il est donc possible de savoir par quel équipement le
+paquet passe.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+traceroute google.fr
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+un exemple avec ping:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ping -t 1 google.fr
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Diagnostique (nc)
+
+http://man.openbsd.org/OpenBSD-current/man1/nc.1[nc] (netcat) est un
+outil permettant de contrôler la couche 4 (transport). Il permet de
+manipuler des
+http://man.openbsd.org/OpenBSD-current/man2/socket.2["sockets"], terme
+désignant grossièrement les structures de données présentent sur les
+couches transports et supérieurs.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# scan tcp
+nc -zv $host $port
+
+# message tcp via netcat
+echo "test" | nc $host $port
+
+# serveur tcp via netcat
+echo "test" | nc -l $port
+
+# scan udp
+nc -zvu $host $port
+
+# message udp via netcat
+echo "test" | nc -u $host $port
+
+# serveur udp via netcat
+echo "test" | nc -lu $port
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Diagnostique (netstat)
+
+La commande
+http://man.openbsd.org/OpenBSD-current/man1/netstat.1[netstat] permet
+d'afficher différentes informations concernant la stack réseau.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# afficher la table de routage
+netstat -nr
+netstat -nrv
+
+# afficher le statut des toutes les connexions
+netstat -na
+
+# afficher le statut de toutes les connexions (ipv4, tcp || udp)
+netstat -na -f inet
+netstat -na -f inet -p tcp
+netstat -na -f inet -p udp
+
+# afficher le statut de toutes les connexions (ipv6, tcp || udp)
+netstat -na -f inet6
+netstat -na -f inet6 -p tcp
+netstat -na -f inet6 -p udp
+
+# afficher les statistiques
+netstat -s
+netstat -sp ip
+netstat -sp tcp
+netstat -sp udp
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Diagnostic (tcpdump)
+
+http://man.openbsd.org/OpenBSD-current/man8/tcpdump.8[tcpdump] est un
+outil de monitoring, il permet de voir les paquets transitant sur une
+interface.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# afficher les paquets en transit sur l'interface $int
+tcpdump -i ${int}
+
+# afficher les paquets en transit sur $int avec l'adresse MAC (ethernet)
+tcpdump -ei ${int}
+
+# afficher seulement les paquets en transit sur le port 80 en TCP (HTTP)
+tcpdump -i ${int} tcp port 80
+tcpdump -i ${int} tcp port http
+
+# afficher seulement les paquets en transit sur le port 53 en UDP (DNS)
+tcpdump -i ${int} udp port 53
+tcpdump -i ${int} udp port domain
+
+# afficher plus d'information sur les paquets en transit
+tcpdump -e -vvvv -XX -i ${int}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Configuration (sysctl)
+
+http://man.openbsd.org/OpenBSD-current/man8/sysctl.8[sysctl] n'est pas
+un outil directement lié au réseau, mais lié à la configuration du
+kernel. Le noyau étant le gardien de la stack réseau jusqu'à la couche
+transport, certains besoins nécessite sa configuration. Par exemple,
+l'action de router un paquet nécessite d'activer le transfert de
+paquet (forwarding):
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sysctl -a
+sysctl net.inet.ip.forwarding=1 net.inet6.ip6.forwarding=1
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Configuration (route)
+
+http://man.openbsd.org/OpenBSD-current/man8/route.8[route] est un
+utilitaire permettant de gérer les
+http://man.openbsd.org/OpenBSD-current/man4/route.4[tables de routage
+du système]. Il peut afficher, créer, altérer ou supprimer les
+informations contenues dans ces tables. Une table de routage contient
+la route que doit prendre un paquet pour arriver à sa destination.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# affiche les routes, similaire à netstat -rn
+route show
+
+# rajoute une route par défaut
+route add default 192.168.42.1
+
+# supprime la route par défaut
+route del default 192.168.42.1
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Firewalling (pf)
+
+http://man.openbsd.org/OpenBSD-current/man4/pf.4[Packet Filter] est un
+firewall basé sur https://www.phildev.net/ipf/[IPFilter] (Darren
+Reed), suite à différents problèmes de
+http://undeadly.org/cgi?action=article&sid=20010527142347[license], pf
+fut réécrit sur les cendres d'IPFilter en quelques jours.
+
+Packet Filter est un pare-feu à état, mature et moderne, réutilisé sur
+de nombreux systèmes:
+
+ * FreeBSD (pfsense, opnsense...)
+ * NetBSD (npf)
+ * MacOS
+ * Solaris
+
+== OpenBSD - Firewalling (pfctl)
+
+http://man.openbsd.org/OpenBSD-current/man8/pfctl.8[pfctl] est utilisé
+pour contrôler Packet Filter. Cette commande permet de voir l'état du
+firewall, les règles, les statistiques et permet aussi de
+démarrer/arrêter/recharger les règles de filtrage.
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# activer le firewall
+pfctl -e
+
+# désactiver le firewall
+pfctl -d
+
+# tester la configuration du firewall
+pfctl -nf /etc/pf.conf
+
+# afficher toutes les informations concernant le firewall
+pfctl -s all
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Firewalling (pf.conf)
+
+Le fichier de configuration de Packet Filter se trouve dans
+http://man.openbsd.org/OpenBSD-current/man5/pf.conf.5[`/etc/pf.conf`].
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pass
+block in from any to port 80
+block in from any to any port 443><1024
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== OpenBSD - Firewalling (pflog)
+
+Packet Filter permet de voir en temps réel les paquets passant par
+l'interface. Cette fonctionnalité (logging) permet entre autre de
+valider la configuration du firewall en ayant un aperçu des paquets
+bloqués ou autorisés. Une interface virtuelle
+http://man.openbsd.org/OpenBSD-current/man4/pflog.4[pflog] est
+nécessaire pour cette fonctionnalité
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tcpdump -i pflog0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+http://man.openbsd.org/OpenBSD-current/man8/pflogd.8[pflogd] permet
+d'archiver ce qui est logué. Cet utilitaire sauvegarde les
+informations dans `/var/log/pflog` au format pcap. Pour lire ces
+fichiers, il faut donc utiliser tcpdump:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tcpdump -r /var/log/pflog
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Packet Filter - Règles simples (filtrage en entrée)
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+set skip on lo
+block on em0
+pass in proto tcp 22
+pass in proto tcp port 80
+pass in proto tcp port 443
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+set skip on lo
+block on em0                 # bloque
+pass in proto tcp port ssh   # connexion ssh autorisé en entrée
+pass in proto tcp port http  # connexion http autorisé en entrée
+pass in proto tcp port https # connexion https autorisé en entrée
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+set skip on lo
+block on em0
+pass in proto tcp to port { ssh, http, https }
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pfctl -nf /etc/pf.conf
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Packet Filter - Règles simples (filtrage en sortie)
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+set skip on lo
+block
+pass in proto tcp to port { ssh, http, https }
+pass out proto tcp from port ssh user root
+pass out proto tcp from port { http, https } user www
+pass out proto tcp to port { domain, http, https } user root
+pass out proto udp to port domain user root
+pass out proto { udp, tcp } to port domain user _unbound
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Packet Filter - Règles simples (logging)
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ifconfig pflog1 create
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+set skip on lo0
+block log
+pass in log to pflog1 proto tcp to port { ssh, http, https }
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Packet Filter - Règles avancée (introduction)
+
+.Normalisation
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+match in all scrub
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Redirection
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+match in on em0 proto tcp port 8080 rdr-to localhost port 8080
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Translation
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+match out on em0 inet from (em1) to any nat-to (em0) 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Queuing
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+queue std on em0 bandwidth 100M
+queue http parent std bandwidth 80M default
+
+block
+pass set queue std
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Fingerprinting
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+block
+pass from any to any os OpenBSD
+block from any to any os "unknown"
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Conclusion
+
+Cet atelier avait surtout pour but de remettre à jour sur la
+configuration d'un réseau et la présentation des protocoles. La
+configuration du firewall est un point essentiel dans de nombreux
+projets, cet équipement garantie la sécurité mais aussi la
+disponibilité des services.
+
+La redondance de cet équipement est pratiquement obligatoire, et nous
+verrons les solutions qui sont à notre disposition dans les projets
+ateliers.
+
+== Annexe - Configuration Machine Virtuelle
+
+.Avec la commande `ip` (activation)
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# création d'une interface tap
+ip tuntap add tap0 mode tap
+
+# création d'un bridge
+ip link add bridge0 type bridge
+
+# branchement d'eth0 et tap0 sur le bridge
+ip link set tap0 master bridge0
+ip link set eth0 master bridge0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Avec la commande `ip` (désactivation)
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ip link set tap0 nomaster
+ip link set eth0 nomaster
+ip link del tap0
+ip link del bridge0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Avec la commande `brctl`
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+brctl addbr bridge0
+brctl addif tap0
+brctl addif eth0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Configurer QEMU/KVM avec bridge + tap
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# si freebsd/openbsd/netbsd
+sysctl net.inet.ip.forwarding=1 net.inet6.ip6.forwarding=1
+chmod g+rw /dev/tap0
+chown :${USER} /dev/tap0
+
+# si linux
+sysctl net.ipv4.ip_forward=1 net.ipv6.ip_forward=1
+mknod /dev/net/tap0 c 36 16 
+mknod /dev/net/tap1 c 36 17
+chmod g+rw /dev/net/tap0
+chmod g+rw /dev/net/tap1
+chown :${USER} /dev/net/tap0
+chown :${USER} /dev/net/tap1
+
+qemu -enable-kvm -net nic -netdev tap,ifname=tap0 /path/to/disk.img
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Annexe - Liens
+
+ * Man pages:
+ ** http://man.openbsd.org/intro.4
+ ** http://man.openbsd.org/netintro.4
+ ** http://man.openbsd.org/OpenBSD-current/man8/ifconfig.8
+ ** http://man.openbsd.org/hostname.if.5
+ ** http://man.openbsd.org/netstat.1
+ ** http://man.openbsd.org/hosts.5
+ ** http://man.openbsd.org/rc.8
+ ** http://man.openbsd.org/tcpdump.8
+
+ * FAQ:
+ ** https://www.openbsd.org/faq/faq6.html
+ ** https://www.openbsd.org/faq/faq8.html
+
+ * Packet Filter:
+ ** https://www.openbsd.org/faq/pf/
+ ** https://www.freebsd.org/doc/handbook/firewalls-pf.html
+ ** https://www.netbsd.org/docs/network/pf.html
+ ** https://docs.oracle.com/cd/E53394_01/html/E54829/pfovw-intr.html
+ ** https://calomel.org/pf_config.html
+ ** http://www.benzedrine.ch/pf.html
+ ** https://home.nuug.no/~peter/pf/en/
+
+ * Linux Networking
+ ** https://www.inetdoc.net/guides/vm/vm.network.tun-tap.html
+ ** http://www.lanana.org/docs/device-list/
+
+ * Configuration machine virtuelle
+ ** https://wiki.archlinux.org/index.php/QEMU#Creating_bridge_manually
+ ** http://www.linux-kvm.org/page/Networking
+ ** https://en.wikibooks.org/wiki/QEMU/Networking
+
+== Annexe - Bibliographie
+
+ * http://www.portcity.edu.bd/ELibrary/CSE/Dataandcomputercommunications.pdf[Data
+   and Computer Communications]
+ * https://www.nostarch.com/pf3[The Book of PF]
+
+

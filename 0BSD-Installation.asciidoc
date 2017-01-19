@@ -1,0 +1,232 @@
+= Présentation des systèmes BSD - Installation et Configuration
+:author:    Mathieu Kerjouan <contact@steepath.eu>
+:twitter:   https://twitter.com/niamtokik
+:backend:   slidy
+:max-width: 42em
+:data-uri:
+:icons:
+:iconsdir: /usr/local/etc/asciidoc/images/icons
+:images:
+:imagesdir: ./img/
+:duration: 120
+:copyright: Mathieu Kerjouan <contact@steepath.eu>
+
+//////////////////////////////////////////////////////////////////////
+Copyright (c) 2016, Mathieu Kerjouan <contact@steepath.eu>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//////////////////////////////////////////////////////////////////////
+
+Cette présentation a été réalisé avec
+http://www.methods.co.nz/asciidoc/[asciidoc] et le thème
+http://www.methods.co.nz/asciidoc/slidy.html[slidy]. ;)
+______________________________________________________________________
+Copyright (c) 2016, Mathieu Kerjouan <contact@steepath.eu>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+______________________________________________________________________
+
+
+== But de la présentation
+
+Une présentation similaire a été donné en 2014, cette dernière a eu de
+très bon retour, mais je n'ai pas eu le temps d'en faire plus. Cette
+session a pour but:
+
+ * Présentation rapidement les systèmes BSD
+ * Installer et configurer les 4 systèmes BSD
+ * Répondre à vos besoins et à vos questions
+ * Discuter ensemble du prochain meetup
+
+== Histoire - Rapidement
+
+ * 1969: Première version d'Unix fonctionnant sur PDP-7
+ * 1977: Distribution d'UNIXv7 aux université: apparition de 1BSD
+ * 1979: William Joy et Ozalp Baboglu développent 3BSD 
+ * 1980: La DARPA et Berkeley créent 4BSD en fondant une équipe de dev
+ * 1986: Berkeley release la version 4.3BSD
+ * 1987: Création de MINIX1.0 pour les étudiants
+ * 1988: Berkeley release la version 4.3BSD Tahoe
+ * 1989: Berkeley release la version 4.3BSD Net1
+ * 1990: Berkeley release la version 4.3BSD Reno
+ * 1991: Berkeley release la version 4.3BSD Net2
+ * 1991: Linux Torvald release la première version de Linux (v0.01)
+ * 1992: Création de 386BSD
+ * 1993: Berkeley release la version 4.4BSD
+ * 1993: première release de NetBSD (v0.8)
+ * 1993: première release de FreeBSD (v1.0)
+ * 1994: Berkeley release la version 4.4BSD-Lite (sans code propriétaire)
+ * 1996: Première release d'OpenBSD (v1.2)
+ * 2003: création de DragonFlyBSD basé sur FreeBSD (v4.4)
+
+== Histoire - Mon expérience
+
+ * Technicien Réseau - Cisco, RedBack, Huawei, ALU
+ * Administrateur Système Linux - RHEL, Debian
+ * Administrateur Système Unix - FreeBSD, OpenBSD
+
+----
+----
+
+ * Découverte des BSDs avec FreeBSD 5.2 
+ * Première utilisation réelle en production avec OpenBSD 4.6 (monitoring)
+ * Utilisation de PFSense et FreeBSD en tant que firewall
+ * Utilisation de FreeBSD pour backend ZFS et virtualisation (jails)
+ * Une grande majorité de mes serveurs fonctionnent sous FreeBSD ou OpenBSD.
+
+== Histoire - Pourquoi BSD?
+
+ * Besoin d'un système stable avec support long terme
+ * Besoin d'une documentation de qualité
+ * Besoin d'un système sécurisé
+ * Simplicité de compilation et d'installation
+ * perte de controle et instabilité des systèmes GNU/Linux
+
+[quote, netstat on debian, https://manpages.debian.org/cgi-bin/man.cgi?query=netstat]
+______________________________________________________________________
+Timer
+    (this needs to be written)
+______________________________________________________________________
+
+
+== Installation avec qemu
+
+Un script d'initialisation en shell:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+QEMU_OPTS="-m 2G"
+QEMU="qemu-system-x86_64 ${QEMU_OPTS}"
+for vm in openbsd:10G freebsd:80G dragonflybsd:80G netbsd:20G
+do
+  name=$(echo "${vm}"|cut -d: -f1)
+  size=$(echo "${vm}"|cut -d: -f2)
+  mkdir -p "vm/${name}"
+  qemu-img create -fqcow2 "vm/${name}/disk.img" "${size}"
+  CMD="${QEMU} -boot d -cdrom ${name}.iso disk.img"
+  cat > "vm/${name}/${name}.sh" << EOF
+#!/usr/bin/env sh
+case \${1} in
+  install) ${CMD};;
+  start) $(echo ${CMD} | sed 's/-boot d//');;
+esac
+EOF
+  chmod +x "vm/${name}/${name}.sh"
+done
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== FreeBSD
+
+Ce que nous allons faire:
+
+ * présentation de l'installeur (semi-graphique)
+ * installation ZFS
+ * configuration du système de base
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd vm/freebsd
+ISO=releases/amd64/amd64/ISO-IMAGES/10.3/FreeBSD-10.3-RELEASE-amd64-disc1.iso 
+fetch -o freebsd.iso "http://10.83.116.1/FreeBSD/${ISO}"
+./freebsd.sh
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+______________________________________________________________________
+The power to serve
+______________________________________________________________________
+
+
+== OpenBSD
+
+Ce que nous allons faire:
+
+ * présentation de l'installeur (texte)
+ * installation FDE (Full Disk Encryption)
+ * configuration du système de base
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd vm/openbsd
+ISO=5.9/amd64/install59.iso
+fetch -o openbsd.iso "http://10.83.116.1/OpenBSD/${ISO}"
+./openbsd.sh
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+______________________________________________________________________
+Only two remote holes in the default install, in a heck of a long time!
+______________________________________________________________________
+
+== NetBSD
+
+Ce que nous allons faire:
+
+ * présentation de l'installeur (semi-graphique)
+ * installation minimaliste
+ * configuration du système de base
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd vm/netbsd
+ISO=NetBSD-7.0/amd64/installation/cdrom/boot.iso
+fetch -o netbsd.iso "http://10.83.116.1/NetBSD/${ISO}"
+./netbsd.sh
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+______________________________________________________________________
+Of course it runs NetBSD
+______________________________________________________________________
+
+== DragonFlyBSD
+
+Ce que nous allons faire:
+
+ * présentation de l'installeur (semi-graphique)
+ * installation hammer
+ * configuration du système de base
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cd vm/dragonflybsd
+ISO=iso-images/dfly-x86_64-4.4.3_REL.iso.bz2
+fetch "http://10.83.116.1/DragonFlyBSD/${ISO}"
+bunzip2 ${ISO##*/}
+mv dfly-x86_64-4.4.3_REL.iso dragonflybsd.iso
+./dragonflybsd.sh
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+______________________________________________________________________
+The ultimate goal of the DragonFly project at its inception was to
+provide native clustering support in the kernel.
+______________________________________________________________________
